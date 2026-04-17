@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { completeChatJson, GroqClientError } from "../lib/groqClient";
 import { interpolateTranscriptContext } from "../lib/prompts";
-import { takeLastWords } from "../lib/text";
+import { takeLastWords, truncateToMaxWords } from "../lib/text";
 import { useSessionStore } from "../store/sessionStore";
 import type { SuggestionItem, SuggestionTypeValue } from "../store/sessionStore";
 import { useSettingsStore } from "../store/settingsStore";
@@ -14,21 +14,24 @@ const VALID_TYPES: SuggestionTypeValue[] = [
   "answer",
 ];
 
-function countWords(s: string): number {
-  const t = s.trim().replace(/\s+/g, " ");
-  if (t.length === 0) {
-    return 0;
-  }
-  return t.split(" ").length;
-}
+/** Normalized keys that are not already VALID_TYPES ids */
+const TYPE_ALIASES: Record<string, SuggestionTypeValue> = {
+  follow_up: "question_to_ask",
+  followup: "question_to_ask",
+  follow_up_question: "question_to_ask",
+  talkingpoint: "talking_point",
+  factcheck: "fact_check",
+};
 
 function parseSuggestionType(raw: unknown): SuggestionTypeValue | null {
   if (typeof raw !== "string") {
     return null;
   }
-  return VALID_TYPES.includes(raw as SuggestionTypeValue)
-    ? (raw as SuggestionTypeValue)
-    : null;
+  const key = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (VALID_TYPES.includes(key as SuggestionTypeValue)) {
+    return key as SuggestionTypeValue;
+  }
+  return TYPE_ALIASES[key] ?? null;
 }
 
 function extractJsonArray(raw: string): unknown {
@@ -51,13 +54,13 @@ function normalizeSuggestion(raw: unknown): SuggestionItem | null {
   }
   const obj = raw as Record<string, unknown>;
   const type = parseSuggestionType(obj.type);
-  const headline =
+  const headlineRaw =
     typeof obj.headline === "string" ? obj.headline.trim() : "";
-  const subtext = typeof obj.subtext === "string" ? obj.subtext.trim() : "";
+  const subtextRaw =
+    typeof obj.subtext === "string" ? obj.subtext.trim() : "";
+  const headline = truncateToMaxWords(headlineRaw, 12);
+  const subtext = truncateToMaxWords(subtextRaw, 20);
   if (!type || headline.length === 0 || subtext.length === 0) {
-    return null;
-  }
-  if (countWords(headline) > 12 || countWords(subtext) > 20) {
     return null;
   }
   return {
@@ -77,7 +80,9 @@ function parseThreeSuggestions(content: string): SuggestionItem[] {
   for (const entry of parsed) {
     const item = normalizeSuggestion(entry);
     if (!item) {
-      throw new Error("Invalid suggestion object or word limits exceeded");
+      throw new Error(
+        "Invalid suggestion: each item needs a known type, headline, and subtext"
+      );
     }
     items.push(item);
   }

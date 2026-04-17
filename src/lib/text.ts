@@ -17,3 +17,14 @@ export function countWords(text: string): number {
   }
   return normalized.split(" ").length;
 }
+
+export function truncateToMaxWords(text: string, maxWords: number): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return "";
+  }
+  if (words.length <= maxWords) {
+    return words.join(" ");
+  }
+  return words.slice(0, maxWords).join(" ");
+}
