@@ -25,7 +25,20 @@ export interface SettingsState {
   setModel: (value: string) => void;
 }
 
-const DEFAULT_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct";
+/** Groq removed Maverick from the API; see https://console.groq.com/docs/deprecations */
+const DEPRECATED_MODEL_IDS = new Set<string>([
+  "meta-llama/llama-4-maverick-17b-128e-instruct",
+]);
+
+const DEFAULT_MODEL = "openai/gpt-oss-120b";
+
+function migrateModelIfNeeded(model: string): string {
+  const trimmed = model.trim();
+  if (DEPRECATED_MODEL_IDS.has(trimmed)) {
+    return DEFAULT_MODEL;
+  }
+  return model;
+}
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
@@ -62,6 +75,17 @@ export const useSettingsStore = create<SettingsState>()(
         refreshIntervalSeconds: state.refreshIntervalSeconds,
         model: state.model,
       }),
+      merge: (persistedState, currentState) => {
+        if (!persistedState || typeof persistedState !== "object") {
+          return currentState;
+        }
+        const merged = {
+          ...currentState,
+          ...(persistedState as Record<string, unknown>),
+        } as SettingsState;
+        merged.model = migrateModelIfNeeded(merged.model);
+        return merged;
+      },
     }
   )
 );

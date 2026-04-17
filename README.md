@@ -43,7 +43,7 @@ If you already have the repo on your machine, start at step 2.
 4. **Open the app** using the URL printed in the terminal (typically [http://localhost:5173](http://localhost:5173)).
 
 5. **Configure Groq**  
-   If no API key is saved yet, the **Settings** modal opens automatically. Otherwise, click the **gear** icon. Paste your Groq API key and click **Save**. Prompts, model id, context window sizes, and suggestion refresh interval are stored in **localStorage**.
+   If no API key is saved yet, the **Settings** modal opens automatically. Otherwise, click the **gear** icon. Paste your Groq API key and click **Save**. Prompts, model id, context window sizes, and suggestion refresh interval are stored in **localStorage**. The default chat model is **`openai/gpt-oss-120b`** (Groq’s current replacement for deprecated Llama 4 Maverick); you can switch to any model your key can access—see [Groq supported models](https://console.groq.com/docs/models).
 
 6. **Use the meeting UI**  
    - **Left:** Click **Start** and allow microphone access. Audio is chunked about every **30 seconds** and sent to Groq Whisper for transcription.  
@@ -107,6 +107,7 @@ Click **Export session** in the top bar to download JSON named `twinmind-session
 | Transcript errors | Read the red banner under the transcript header; verify the key and Groq account limits. |
 | No microphone / no audio | Use `https` or `localhost`, check OS/browser permissions, try Chrome/Edge. |
 | Suggestions fail to parse | The model must return **exactly three** JSON objects with **distinct** `type` values; adjust the suggestion prompt or model in Settings if needed. |
+| Chat error **404 model_not_found** | Your saved **Model** string is not available to your account. Open Settings and set a valid id from the [models list](https://console.groq.com/docs/models) (for example `openai/gpt-oss-120b` or `llama-3.3-70b-versatile`). |
 
 ## License
 
