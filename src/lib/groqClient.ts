@@ -56,9 +56,33 @@ interface ChatCompletionResponse {
   }>;
 }
 
+function extensionForAudioBlob(blob: Blob): string {
+  const type = blob.type.toLowerCase();
+  if (type.includes("webm")) {
+    return "webm";
+  }
+  if (type.includes("mp4") || type.includes("m4a")) {
+    return "m4a";
+  }
+  if (type.includes("mpeg") || type.includes("mp3")) {
+    return "mp3";
+  }
+  if (type.includes("ogg")) {
+    return "ogg";
+  }
+  if (type.includes("wav")) {
+    return "wav";
+  }
+  if (type.includes("flac")) {
+    return "flac";
+  }
+  return "webm";
+}
+
 export async function transcribeAudioBlob(audioBlob: Blob): Promise<string> {
+  const ext = extensionForAudioBlob(audioBlob);
   const formData = new FormData();
-  formData.append("file", audioBlob, "chunk.webm");
+  formData.append("file", audioBlob, `chunk.${ext}`);
   formData.append("model", "whisper-large-v3");
 
   const res = await fetch(`${GROQ_BASE}/audio/transcriptions`, {

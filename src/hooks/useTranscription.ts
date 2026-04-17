@@ -12,12 +12,25 @@ interface UseTranscriptionResult {
   stopRecording: () => void;
 }
 
+function pickRecorderMimeType(): string {
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+  ];
+  return (
+    candidates.find((m) => MediaRecorder.isTypeSupported(m)) ?? ""
+  );
+}
+
 export function useTranscription(): UseTranscriptionResult {
   const [isRecording, setIsRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const chunkTimerRef = useRef<number | null>(null);
+  const isSessionActiveRef = useRef(false);
   const appendTranscript = useSessionStore((s) => s.appendTranscript);
 
   const stopTracks = useCallback(() => {
@@ -25,36 +38,12 @@ export function useTranscription(): UseTranscriptionResult {
     streamRef.current = null;
   }, []);
 
-  const flushRecorder = useCallback(async () => {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state === "inactive") {
-      return;
+  const clearChunkTimer = useCallback(() => {
+    if (chunkTimerRef.current !== null) {
+      window.clearInterval(chunkTimerRef.current);
+      chunkTimerRef.current = null;
     }
-    await new Promise<void>((resolve) => {
-      const onStop = (): void => {
-        recorder.removeEventListener("stop", onStop);
-        resolve();
-      };
-      recorder.addEventListener("stop", onStop);
-      recorder.stop();
-    });
   }, []);
-
-  const stopRecording = useCallback(() => {
-    void (async () => {
-      await flushRecorder();
-      mediaRecorderRef.current = null;
-      setIsRecording(false);
-      stopTracks();
-    })();
-  }, [flushRecorder, stopTracks]);
-
-  useEffect(() => {
-    return () => {
-      void flushRecorder();
-      stopTracks();
-    };
-  }, [flushRecorder, stopTracks]);
 
   const processChunk = useCallback(
     async (blob: Blob) => {
@@ -82,35 +71,105 @@ export function useTranscription(): UseTranscriptionResult {
     [appendTranscript]
   );
 
+  const beginSegment = useCallback(
+    (stream: MediaStream): void => {
+      if (!isSessionActiveRef.current) {
+        return;
+      }
+      const mimeType = pickRecorderMimeType();
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+      const segmentChunks: Blob[] = [];
+
+      recorder.addEventListener("dataavailable", (event: BlobEvent) => {
+        if (event.data && event.data.size > 0) {
+          segmentChunks.push(event.data);
+        }
+      });
+
+      recorder.addEventListener("stop", () => {
+        const mergedType =
+          segmentChunks[0]?.type && segmentChunks[0].type.length > 0
+            ? segmentChunks[0].type
+            : recorder.mimeType || "audio/webm";
+        const blob = new Blob(segmentChunks, { type: mergedType });
+        mediaRecorderRef.current = null;
+        if (blob.size > 0) {
+          void processChunk(blob);
+        }
+        if (isSessionActiveRef.current && streamRef.current) {
+          beginSegment(streamRef.current);
+        } else {
+          stopTracks();
+        }
+      });
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+    },
+    [processChunk, stopTracks]
+  );
+
+  const stopRecording = useCallback(() => {
+    isSessionActiveRef.current = false;
+    clearChunkTimer();
+    setIsRecording(false);
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    } else {
+      mediaRecorderRef.current = null;
+      stopTracks();
+    }
+  }, [clearChunkTimer, stopTracks]);
+
+  useEffect(() => {
+    return () => {
+      isSessionActiveRef.current = false;
+      clearChunkTimer();
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== "inactive") {
+        recorder.stop();
+      }
+      stopTracks();
+    };
+  }, [clearChunkTimer, stopTracks]);
+
+  useEffect(() => {
+    if (!isRecording) {
+      return;
+    }
+    chunkTimerRef.current = window.setInterval(() => {
+      const recorder = mediaRecorderRef.current;
+      if (
+        isSessionActiveRef.current &&
+        recorder &&
+        recorder.state === "recording"
+      ) {
+        recorder.stop();
+      }
+    }, CHUNK_MS);
+    return () => {
+      if (chunkTimerRef.current !== null) {
+        window.clearInterval(chunkTimerRef.current);
+        chunkTimerRef.current = null;
+      }
+    };
+  }, [isRecording]);
+
   const startRecording = useCallback(async () => {
     setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      const mimeCandidates = [
-        "audio/webm;codecs=opus",
-        "audio/webm",
-        "audio/mp4",
-      ];
-      const mimeType =
-        mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (event: BlobEvent) => {
-        if (event.data && event.data.size > 0) {
-          void processChunk(event.data);
-        }
-      };
-
-      recorder.start(CHUNK_MS);
+      isSessionActiveRef.current = true;
+      beginSegment(stream);
       setIsRecording(true);
     } catch {
       setError("Microphone access denied or unavailable");
     }
-  }, [processChunk]);
+  }, [beginSegment]);
 
   return {
     isRecording,

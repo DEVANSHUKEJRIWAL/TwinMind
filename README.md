@@ -105,6 +105,7 @@ Click **Export session** in the top bar to download JSON named `twinmind-session
 | ----- | ----------- |
 | Settings keeps opening | Save a non-empty Groq API key in Settings. |
 | Transcript errors | Read the red banner under the transcript header; verify the key and Groq account limits. |
+| Transcription **400** “not a valid media file” | Usually fixed by uploading **complete** audio segments (the app restarts `MediaRecorder` every 30s). If it persists, try Chrome/Edge or another browser; avoid renaming formats—Groq expects real WebM/MP4 audio. |
 | No microphone / no audio | Use `https` or `localhost`, check OS/browser permissions, try Chrome/Edge. |
 | Suggestions fail to parse | The model must return **exactly three** JSON objects with **distinct** `type` values; adjust the suggestion prompt or model in Settings if needed. |
 | Chat error **404 model_not_found** | Your saved **Model** string is not available to your account. Open Settings and set a valid id from the [models list](https://console.groq.com/docs/models) (for example `openai/gpt-oss-120b` or `llama-3.3-70b-versatile`). |
