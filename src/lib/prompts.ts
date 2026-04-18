@@ -30,6 +30,7 @@ Meeting transcript so far:
 The suggestion they clicked:
 Type: {SUGGESTION_TYPE}
 Headline: {SUGGESTION_HEADLINE}
+Preview: {SUGGESTION_SUBTEXT}
 
 Provide a detailed, immediately usable response (150–300 words). Be concrete and specific to the conversation above. Use short paragraphs or bullet points. No fluff.`;
 
@@ -51,10 +52,12 @@ export function interpolateDetailedAnswerPrompt(
   template: string,
   transcriptContext: string,
   suggestionType: string,
-  suggestionHeadline: string
+  suggestionHeadline: string,
+  suggestionSubtext: string
 ): string {
   return template
     .replaceAll("{TRANSCRIPT_CONTEXT}", transcriptContext)
     .replaceAll("{SUGGESTION_TYPE}", suggestionType)
-    .replaceAll("{SUGGESTION_HEADLINE}", suggestionHeadline);
+    .replaceAll("{SUGGESTION_HEADLINE}", suggestionHeadline)
+    .replaceAll("{SUGGESTION_SUBTEXT}", suggestionSubtext);
 }

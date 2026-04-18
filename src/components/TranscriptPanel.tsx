@@ -4,14 +4,29 @@ import { useSessionStore } from "../store/sessionStore";
 
 export function TranscriptPanel(): ReactElement {
   const fullTranscript = useSessionStore((s) => s.fullTranscript);
+  const transcriptionManualSync = useSessionStore(
+    (s) => s.transcriptionManualSync
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
+  const prevSyncRef = useRef(transcriptionManualSync);
   const {
     isRecording,
     error,
     isTranscribing,
     startRecording,
     stopRecording,
+    flushPartialSegment,
   } = useTranscription();
+
+  useEffect(() => {
+    if (
+      isRecording &&
+      transcriptionManualSync !== prevSyncRef.current
+    ) {
+      flushPartialSegment();
+    }
+    prevSyncRef.current = transcriptionManualSync;
+  }, [transcriptionManualSync, isRecording, flushPartialSegment]);
 
   useEffect(() => {
     const el = scrollRef.current;

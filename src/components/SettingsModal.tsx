@@ -27,10 +27,12 @@ export function SettingsModal({
   const chatContextWordCount = useSettingsStore(
     (s) => s.chatContextWordCount
   );
+  const detailedAnswerContextWordCount = useSettingsStore(
+    (s) => s.detailedAnswerContextWordCount
+  );
   const refreshIntervalSeconds = useSettingsStore(
     (s) => s.refreshIntervalSeconds
   );
-  const model = useSettingsStore((s) => s.model);
 
   const setGroqApiKey = useSettingsStore((s) => s.setGroqApiKey);
   const setSuggestionPrompt = useSettingsStore((s) => s.setSuggestionPrompt);
@@ -44,10 +46,12 @@ export function SettingsModal({
   const setChatContextWordCount = useSettingsStore(
     (s) => s.setChatContextWordCount
   );
+  const setDetailedAnswerContextWordCount = useSettingsStore(
+    (s) => s.setDetailedAnswerContextWordCount
+  );
   const setRefreshIntervalSeconds = useSettingsStore(
     (s) => s.setRefreshIntervalSeconds
   );
-  const setModel = useSettingsStore((s) => s.setModel);
 
   const [localKey, setLocalKey] = useState(groqApiKey);
   const [localSuggestionPrompt, setLocalSuggestionPrompt] =
@@ -62,10 +66,12 @@ export function SettingsModal({
   const [localChatWords, setLocalChatWords] = useState(
     String(chatContextWordCount)
   );
+  const [localDetailWords, setLocalDetailWords] = useState(
+    String(detailedAnswerContextWordCount)
+  );
   const [localRefresh, setLocalRefresh] = useState(
     String(refreshIntervalSeconds)
   );
-  const [localModel, setLocalModel] = useState(model);
 
   useEffect(() => {
     if (open) {
@@ -75,8 +81,8 @@ export function SettingsModal({
       setLocalChatPrompt(chatSystemPrompt);
       setLocalSuggestionWords(String(suggestionContextWordCount));
       setLocalChatWords(String(chatContextWordCount));
+      setLocalDetailWords(String(detailedAnswerContextWordCount));
       setLocalRefresh(String(refreshIntervalSeconds));
-      setLocalModel(model);
     }
   }, [
     open,
@@ -86,8 +92,8 @@ export function SettingsModal({
     chatSystemPrompt,
     suggestionContextWordCount,
     chatContextWordCount,
+    detailedAnswerContextWordCount,
     refreshIntervalSeconds,
-    model,
   ]);
 
   if (!open) {
@@ -98,6 +104,7 @@ export function SettingsModal({
     event.preventDefault();
     const sugWords = Number.parseInt(localSuggestionWords, 10);
     const chatWords = Number.parseInt(localChatWords, 10);
+    const detailWords = Number.parseInt(localDetailWords, 10);
     const refreshSec = Number.parseInt(localRefresh, 10);
     setGroqApiKey(localKey.trim());
     setSuggestionPrompt(localSuggestionPrompt);
@@ -109,10 +116,12 @@ export function SettingsModal({
     setChatContextWordCount(
       Number.isFinite(chatWords) && chatWords > 0 ? chatWords : 2000
     );
+    setDetailedAnswerContextWordCount(
+      Number.isFinite(detailWords) && detailWords > 0 ? detailWords : 4000
+    );
     setRefreshIntervalSeconds(
       Number.isFinite(refreshSec) && refreshSec > 0 ? refreshSec : 30
     );
-    setModel(localModel.trim());
     onClose();
   };
 
@@ -133,6 +142,14 @@ export function SettingsModal({
           onSubmit={handleSubmit}
           className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
         >
+          <p className="text-[11px] leading-relaxed text-slate-500">
+            Chat completions and live suggestions use{" "}
+            <span className="font-mono text-slate-400">openai/gpt-oss-120b</span>
+            ; transcription uses{" "}
+            <span className="font-mono text-slate-400">whisper-large-v3</span>{" "}
+            (per assignment). The model id is not user-configurable.
+          </p>
+
           <label className="flex flex-col gap-1 text-xs text-slate-300">
             Groq API key
             <input
@@ -155,9 +172,7 @@ export function SettingsModal({
             />
             <button
               type="button"
-              onClick={() =>
-                setLocalSuggestionPrompt(SUGGESTION_PROMPT)
-              }
+              onClick={() => setLocalSuggestionPrompt(SUGGESTION_PROMPT)}
               className="self-start text-[11px] text-sky-400 hover:underline"
             >
               Reset to default
@@ -165,18 +180,20 @@ export function SettingsModal({
           </label>
 
           <label className="flex flex-col gap-1 text-xs text-slate-300">
-            Detailed answer prompt
+            Detailed answer prompt (on suggestion click)
             <textarea
               value={localDetailedPrompt}
               onChange={(e) => setLocalDetailedPrompt(e.target.value)}
               rows={6}
               className="resize-y rounded-md border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-[11px] leading-snug text-slate-100 outline-none ring-sky-500/30 focus:border-sky-500 focus:ring-2"
             />
+            <span className="text-[10px] text-slate-500">
+              Placeholders: {"{TRANSCRIPT_CONTEXT}"}, {"{SUGGESTION_TYPE}"},{" "}
+              {"{SUGGESTION_HEADLINE}"}, {"{SUGGESTION_SUBTEXT}"}
+            </span>
             <button
               type="button"
-              onClick={() =>
-                setLocalDetailedPrompt(DETAILED_ANSWER_PROMPT)
-              }
+              onClick={() => setLocalDetailedPrompt(DETAILED_ANSWER_PROMPT)}
               className="self-start text-[11px] text-sky-400 hover:underline"
             >
               Reset to default
@@ -200,9 +217,9 @@ export function SettingsModal({
             </button>
           </label>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-xs text-slate-300">
-              Suggestion context (words)
+              Live suggestion context (words)
               <input
                 type="number"
                 min={50}
@@ -221,28 +238,28 @@ export function SettingsModal({
                 className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-sky-500/30 focus:border-sky-500 focus:ring-2"
               />
             </label>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 text-xs text-slate-300">
-              Refresh interval (seconds)
+            <label className="flex flex-col gap-1 text-xs text-slate-300 sm:col-span-2">
+              On-click detailed answer context (words)
               <input
                 type="number"
-                min={5}
-                value={localRefresh}
-                onChange={(e) => setLocalRefresh(e.target.value)}
-                className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-sky-500/30 focus:border-sky-500 focus:ring-2"
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-slate-300">
-              Model
-              <input
-                value={localModel}
-                onChange={(e) => setLocalModel(e.target.value)}
+                min={50}
+                value={localDetailWords}
+                onChange={(e) => setLocalDetailWords(e.target.value)}
                 className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-sky-500/30 focus:border-sky-500 focus:ring-2"
               />
             </label>
           </div>
+
+          <label className="flex flex-col gap-1 text-xs text-slate-300">
+            Suggestion refresh interval (seconds)
+            <input
+              type="number"
+              min={5}
+              value={localRefresh}
+              onChange={(e) => setLocalRefresh(e.target.value)}
+              className="max-w-xs rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-sky-500/30 focus:border-sky-500 focus:ring-2"
+            />
+          </label>
 
           <div className="mt-2 flex justify-end gap-2 border-t border-slate-800 pt-3">
             <button

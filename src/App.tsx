@@ -87,7 +87,7 @@ export default function App(): ReactElement {
             TwinMind Live Suggestions
           </span>
           <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-400">
-            Groq client-side
+            Groq · gpt-oss-120b + whisper
           </span>
         </div>
         <div className="flex items-center gap-2">

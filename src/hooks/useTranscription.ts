@@ -10,6 +10,8 @@ interface UseTranscriptionResult {
   isTranscribing: boolean;
   startRecording: () => Promise<void>;
   stopRecording: () => void;
+  /** Ends the current ~30s segment early so the partial buffer can upload (manual refresh). */
+  flushPartialSegment: () => void;
 }
 
 function pickRecorderMimeType(): string {
@@ -32,6 +34,7 @@ export function useTranscription(): UseTranscriptionResult {
   const chunkTimerRef = useRef<number | null>(null);
   const isSessionActiveRef = useRef(false);
   const appendTranscript = useSessionStore((s) => s.appendTranscript);
+  const setMicSessionActive = useSessionStore((s) => s.setMicSessionActive);
 
   const stopTracks = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -114,6 +117,7 @@ export function useTranscription(): UseTranscriptionResult {
   const stopRecording = useCallback(() => {
     isSessionActiveRef.current = false;
     clearChunkTimer();
+    setMicSessionActive(false);
     setIsRecording(false);
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== "inactive") {
@@ -122,19 +126,20 @@ export function useTranscription(): UseTranscriptionResult {
       mediaRecorderRef.current = null;
       stopTracks();
     }
-  }, [clearChunkTimer, stopTracks]);
+  }, [clearChunkTimer, setMicSessionActive, stopTracks]);
 
   useEffect(() => {
     return () => {
       isSessionActiveRef.current = false;
       clearChunkTimer();
+      setMicSessionActive(false);
       const recorder = mediaRecorderRef.current;
       if (recorder && recorder.state !== "inactive") {
         recorder.stop();
       }
       stopTracks();
     };
-  }, [clearChunkTimer, stopTracks]);
+  }, [clearChunkTimer, setMicSessionActive, stopTracks]);
 
   useEffect(() => {
     if (!isRecording) {
@@ -158,6 +163,13 @@ export function useTranscription(): UseTranscriptionResult {
     };
   }, [isRecording]);
 
+  const flushPartialSegment = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state === "recording") {
+      recorder.stop();
+    }
+  }, []);
+
   const startRecording = useCallback(async () => {
     setError(null);
     try {
@@ -165,11 +177,12 @@ export function useTranscription(): UseTranscriptionResult {
       streamRef.current = stream;
       isSessionActiveRef.current = true;
       beginSegment(stream);
+      setMicSessionActive(true);
       setIsRecording(true);
     } catch {
       setError("Microphone access denied or unavailable");
     }
-  }, [beginSegment]);
+  }, [beginSegment, setMicSessionActive]);
 
   return {
     isRecording,
@@ -177,5 +190,6 @@ export function useTranscription(): UseTranscriptionResult {
     isTranscribing,
     startRecording,
     stopRecording,
+    flushPartialSegment,
   };
 }

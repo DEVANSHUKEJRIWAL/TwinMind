@@ -2,6 +2,9 @@ import { useSettingsStore } from "../store/settingsStore";
 
 const GROQ_BASE = "https://api.groq.com/openai/v1";
 
+/** Assignment: same Groq model for suggestions and chat for comparable submissions. */
+export const GROQ_CHAT_MODEL = "openai/gpt-oss-120b";
+
 export class GroqClientError extends Error {
   readonly status: number | undefined;
   readonly responseBody: string | undefined;
@@ -26,14 +29,6 @@ function getAuthHeaders(): HeadersInit {
   return {
     Authorization: `Bearer ${apiKey}`,
   };
-}
-
-function getModel(): string {
-  const model = useSettingsStore.getState().model.trim();
-  if (!model) {
-    throw new GroqClientError("Model is not set");
-  }
-  return model;
 }
 
 async function readErrorBody(res: Response): Promise<string> {
@@ -117,7 +112,7 @@ export async function completeChatJson(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: getModel(),
+      model: GROQ_CHAT_MODEL,
       messages,
       temperature: 0.4,
     }),
@@ -151,7 +146,7 @@ export async function streamChatCompletion(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: getModel(),
+      model: GROQ_CHAT_MODEL,
       messages,
       stream: true,
       temperature: 0.5,

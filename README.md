@@ -1,25 +1,53 @@
 # TwinMind Live Suggestions
 
-TwinMind is a **client-side AI meeting copilot** built with React, Vite, TypeScript, and Tailwind CSS. It transcribes your microphone in near real time, surfaces three live suggestions on a timer (plus manual refresh), and answers questions in a **streaming** chat. All calls go directly from the browser to the **Groq API**—there is no server in this repository.
+TwinMind is a **client-side AI meeting copilot** built with React, Vite, TypeScript, and Tailwind CSS. It transcribes your microphone in near real time, surfaces three live suggestions on a timer (plus manual refresh), and answers in a **streaming** chat. All calls go from the browser to the **Groq API**—there is no backend in this repository.
+
+## Assignment alignment
+
+| Requirement | Implementation |
+| ----------- | ---------------- |
+| **Models** | **`whisper-large-v3`** for transcription; **`openai/gpt-oss-120b`** for live suggestions and chat (hardcoded in `src/lib/groqClient.ts` so submissions are comparable). |
+| **API key** | User pastes key in Settings; nothing committed. |
+| **Mic + transcript ~30s** | `MediaRecorder` runs in **complete segments** (~30s): stop → merge blob → Whisper → append transcript (avoids invalid WebM fragments). |
+| **Manual refresh** | **Refresh now** ends the current audio segment when the mic is on, waits for that chunk to transcribe, **then** fetches three new suggestions from the updated transcript. |
+| **Suggestion click** | Adds a short user line in chat; the assistant reply is generated from the **detailed-answer prompt** (full transcript window for on-click). A parallel non-stream call also stores the same text in export `detailedAnswer`. |
+| **Export** | JSON: transcript, all suggestion batches, chat with timestamps. |
+| **Session on reload** | Transcript and chat live in memory only until refresh (no server persistence). Settings (prompts, key) persist in `localStorage`. |
 
 ## Tech stack
 
 - React 19, Vite 6, TypeScript (strict)
 - Tailwind CSS
-- Zustand (`settingsStore` persisted to `localStorage`, `sessionStore` for the current session)
+- Zustand (`settingsStore` → `localStorage`, `sessionStore` → in-memory session)
+
+## Prompt strategy
+
+1. **Live suggestions** (`src/lib/prompts.ts` → `SUGGESTION_PROMPT`): inject the **last N words** of the transcript (`suggestionContextWordCount`, default 800). The model must return **exactly three** JSON objects with **distinct** types from `question_to_ask`, `talking_point`, `answer`, `fact_check`, `clarification`. Headlines are actionable, not labels; the last few sentences are weighted in the instructions.
+
+2. **On-click detail** (`DETAILED_ANSWER_PROMPT`): uses a **wider window** (`detailedAnswerContextWordCount`, default 4000 words) so long-form answers can reference more of the meeting. Includes suggestion **type**, **headline**, and **subtext** (`{SUGGESTION_SUBTEXT}`).
+
+3. **Free-form chat** (`CHAT_SYSTEM_PROMPT`): system message includes the **last N words** for chat (`chatContextWordCount`, default 2000) so follow-up questions stay grounded without sending the entire transcript every turn.
+
+4. **Parsing** (`useSuggestions.ts`): extracts a JSON array even if the model wraps it in extra text; normalizes `type` strings; **truncates** headline to 12 words and subtext to 20 words if the model is verbose.
+
+## Tradeoffs
+
+- **Client-only:** Simple deploy and no server secrets, but the Groq key is in the browser (acceptable for an assignment demo; production would use a proxy).
+- **Fixed chat model:** Matches the brief (“same model for everyone”); users cannot switch models in UI.
+- **Manual refresh latency:** Flushing the mic segment + Whisper + suggestions adds a few seconds by design so suggestions see the **latest** transcript.
+- **Suggestion click streaming:** The visible reply streams from a minimal system line plus the **full detailed prompt as the user message**, so the chat bubble matches the long-form brief without double-counting transcript in system + user.
+- **No login:** Single session tab; export is the review artifact.
 
 ## Prerequisites
 
 | Requirement | Notes |
 | ----------- | ----- |
-| **Node.js** | Version **20** or newer (LTS recommended) |
-| **npm** | Bundled with Node |
-| **Groq API key** | Create one at [Groq Console](https://console.groq.com) |
-| **Browser** | Chromium-based browsers (Chrome, Edge) work well for `MediaRecorder` + microphone |
+| **Node.js** | **20+** (LTS recommended) |
+| **npm** | With Node |
+| **Groq API key** | [Groq Console](https://console.groq.com) |
+| **Browser** | Chrome or Edge recommended for `MediaRecorder` |
 
 ## Steps to run (development)
-
-If you already have the repo on your machine, start at step 2.
 
 1. **Clone and enter the project**
 
@@ -28,88 +56,64 @@ If you already have the repo on your machine, start at step 2.
    cd TwinMindAssignment
    ```
 
-2. **Install dependencies**
+2. **`npm install`**
 
-   ```bash
-   npm install
-   ```
+3. **`npm run dev`** — open the URL shown (usually `http://localhost:5173`).
 
-3. **Start the dev server**
+4. **Settings** — paste your Groq API key; adjust prompts or context windows if you want.
 
-   ```bash
-   npm run dev
-   ```
+5. **Left:** Start mic; speak; transcript grows every ~30s (or sooner if you hit **Refresh now** in the middle column).
 
-4. **Open the app** using the URL printed in the terminal (typically [http://localhost:5173](http://localhost:5173)).
-
-5. **Configure Groq**  
-   If no API key is saved yet, the **Settings** modal opens automatically. Otherwise, click the **gear** icon. Paste your Groq API key and click **Save**. Prompts, model id, context window sizes, and suggestion refresh interval are stored in **localStorage**. The default chat model is **`openai/gpt-oss-120b`** (Groq’s current replacement for deprecated Llama 4 Maverick); you can switch to any model your key can access—see [Groq supported models](https://console.groq.com/docs/models).
-
-6. **Use the meeting UI**  
-   - **Left:** Click **Start** and allow microphone access. Audio is chunked about every **30 seconds** and sent to Groq Whisper for transcription.  
-   - **Middle:** Suggestions refresh on your interval and when you click **Refresh now**. Click a card to send it to chat and auto-submit.  
-   - **Right:** Type messages; the assistant streams tokens into the thread.
+6. **Middle / right:** Timed or manual suggestions; click a card or type in chat.
 
 ## npm scripts
 
 | Command | Purpose |
 | ------- | ------- |
-| `npm run dev` | Development server with hot reload |
-| `npm run build` | Typecheck (`tsc -b`) and production build to `dist/` |
-| `npm run preview` | Serve the production build locally |
+| `npm run dev` | Dev server |
+| `npm run build` | `tsc -b` + Vite production build → `dist/` |
+| `npm run preview` | Serve `dist/` locally |
 | `npm run lint` | ESLint |
 
-## Production build
+## Deploy (submit a public URL)
+
+Build a static site from `dist/`:
 
 ```bash
 npm run build
-npm run preview
 ```
 
-Deploy the `dist/` folder to any static host (Netlify, Vercel, S3, etc.). The Groq API key lives in the user’s browser; for anything beyond personal use, consider a **backend proxy** so keys are not exposed client-side.
+Then deploy **`dist/`** to any static host:
+
+- **Vercel:** New Project → import this repo → Framework Preset **Vite** → Output **dist** → Deploy.  
+- **Netlify:** New site from Git → build command `npm run build`, publish directory **`dist`**.
+
+Set nothing server-side; users paste their key in the app after open.
 
 ## Repository layout
 
 ```
 src/
-  hooks/
-    useTranscription.ts
-    useSuggestions.ts
-    useChat.ts
-  lib/
-    groqClient.ts       # All Groq HTTP calls
-    exportSession.ts
-    prompts.ts
-    text.ts
-  components/
-    TranscriptPanel.tsx
-    SuggestionsPanel.tsx
-    SuggestionCard.tsx
-    ChatPanel.tsx
-    SettingsModal.tsx
-    PanelErrorBoundary.tsx
-  store/
-    settingsStore.ts
-    sessionStore.ts
-  App.tsx
-  main.tsx
+  hooks/ useTranscription.ts, useSuggestions.ts, useChat.ts
+  lib/   groqClient.ts, prompts.ts, exportSession.ts, text.ts
+  components/ panels + SettingsModal + error boundaries
+  store/ settingsStore.ts, sessionStore.ts
+  App.tsx, main.tsx
 ```
 
 ## Session export
 
-Click **Export session** in the top bar to download JSON named `twinmind-session-{ISO timestamp}.json`, including transcript, suggestion batches (with `detailedAnswer` when generated), and chat history.
+**Export session** downloads `twinmind-session-{ISO timestamp}.json`: full transcript, each suggestion batch (with `transcriptContextUsed` and per-card `detailedAnswer` when filled), and `chatHistory` with ISO timestamps.
 
 ## Troubleshooting
 
 | Issue | What to try |
 | ----- | ----------- |
-| Settings keeps opening | Save a non-empty Groq API key in Settings. |
-| Transcript errors | Read the red banner under the transcript header; verify the key and Groq account limits. |
-| Transcription **400** “not a valid media file” | Usually fixed by uploading **complete** audio segments (the app restarts `MediaRecorder` every 30s). If it persists, try Chrome/Edge or another browser; avoid renaming formats—Groq expects real WebM/MP4 audio. |
-| No microphone / no audio | Use `https` or `localhost`, check OS/browser permissions, try Chrome/Edge. |
-| Suggestions fail to parse | The model must return **exactly three** JSON objects with **distinct** `type` values (`question_to_ask`, `talking_point`, `fact_check`, `clarification`, `answer`). Headlines longer than 12 words and subtext longer than 20 words are **truncated** automatically. If parsing still fails, tweak the suggestion prompt or model in Settings. |
-| Chat error **404 model_not_found** | Your saved **Model** string is not available to your account. Open Settings and set a valid id from the [models list](https://console.groq.com/docs/models) (for example `openai/gpt-oss-120b` or `llama-3.3-70b-versatile`). |
+| Settings keeps opening | Save a non-empty Groq API key. |
+| Transcript / API errors | Red banner text; check key and Groq limits. |
+| Transcription **400** invalid media | Complete-segment recording + correct file extension; try Chrome/Edge. |
+| Suggestions parse error | Model must return 3 JSON objects with 3 different `types`; see **Prompt strategy**. |
 
 ## License
 
-No license file is included in this repository yet; contact the repository owner for terms of use.
+No license file in repo; contact the owner for terms.

@@ -12,33 +12,22 @@ export interface SettingsState {
   detailedAnswerPrompt: string;
   chatSystemPrompt: string;
   suggestionContextWordCount: number;
+  /** Words of transcript injected into the chat system prompt. */
   chatContextWordCount: number;
+  /** Words of transcript injected into the on-click detailed-answer prompt. */
+  detailedAnswerContextWordCount: number;
   refreshIntervalSeconds: number;
-  model: string;
   setGroqApiKey: (value: string) => void;
   setSuggestionPrompt: (value: string) => void;
   setDetailedAnswerPrompt: (value: string) => void;
   setChatSystemPrompt: (value: string) => void;
   setSuggestionContextWordCount: (value: number) => void;
   setChatContextWordCount: (value: number) => void;
+  setDetailedAnswerContextWordCount: (value: number) => void;
   setRefreshIntervalSeconds: (value: number) => void;
-  setModel: (value: string) => void;
 }
 
-/** Groq removed Maverick from the API; see https://console.groq.com/docs/deprecations */
-const DEPRECATED_MODEL_IDS = new Set<string>([
-  "meta-llama/llama-4-maverick-17b-128e-instruct",
-]);
-
-const DEFAULT_MODEL = "openai/gpt-oss-120b";
-
-function migrateModelIfNeeded(model: string): string {
-  const trimmed = model.trim();
-  if (DEPRECATED_MODEL_IDS.has(trimmed)) {
-    return DEFAULT_MODEL;
-  }
-  return model;
-}
+const DEFAULT_DETAILED_ANSWER_CONTEXT_WORDS = 4000;
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
@@ -49,8 +38,8 @@ export const useSettingsStore = create<SettingsState>()(
       chatSystemPrompt: CHAT_SYSTEM_PROMPT,
       suggestionContextWordCount: 800,
       chatContextWordCount: 2000,
+      detailedAnswerContextWordCount: DEFAULT_DETAILED_ANSWER_CONTEXT_WORDS,
       refreshIntervalSeconds: 30,
-      model: DEFAULT_MODEL,
       setGroqApiKey: (value) => set({ groqApiKey: value }),
       setSuggestionPrompt: (value) => set({ suggestionPrompt: value }),
       setDetailedAnswerPrompt: (value) => set({ detailedAnswerPrompt: value }),
@@ -58,9 +47,10 @@ export const useSettingsStore = create<SettingsState>()(
       setSuggestionContextWordCount: (value) =>
         set({ suggestionContextWordCount: value }),
       setChatContextWordCount: (value) => set({ chatContextWordCount: value }),
+      setDetailedAnswerContextWordCount: (value) =>
+        set({ detailedAnswerContextWordCount: value }),
       setRefreshIntervalSeconds: (value) =>
         set({ refreshIntervalSeconds: value }),
-      setModel: (value) => set({ model: value }),
     }),
     {
       name: "twinmind-settings",
@@ -72,18 +62,56 @@ export const useSettingsStore = create<SettingsState>()(
         chatSystemPrompt: state.chatSystemPrompt,
         suggestionContextWordCount: state.suggestionContextWordCount,
         chatContextWordCount: state.chatContextWordCount,
+        detailedAnswerContextWordCount: state.detailedAnswerContextWordCount,
         refreshIntervalSeconds: state.refreshIntervalSeconds,
-        model: state.model,
       }),
       merge: (persistedState, currentState) => {
         if (!persistedState || typeof persistedState !== "object") {
           return currentState;
         }
-        const merged = {
-          ...currentState,
-          ...(persistedState as Record<string, unknown>),
-        } as SettingsState;
-        merged.model = migrateModelIfNeeded(merged.model);
+        const raw = persistedState as Record<string, unknown>;
+        const merged: SettingsState = { ...currentState };
+        if (typeof raw.groqApiKey === "string") {
+          merged.groqApiKey = raw.groqApiKey;
+        }
+        if (typeof raw.suggestionPrompt === "string") {
+          merged.suggestionPrompt = raw.suggestionPrompt;
+        }
+        if (typeof raw.detailedAnswerPrompt === "string") {
+          merged.detailedAnswerPrompt = raw.detailedAnswerPrompt;
+        }
+        if (typeof raw.chatSystemPrompt === "string") {
+          merged.chatSystemPrompt = raw.chatSystemPrompt;
+        }
+        if (
+          typeof raw.suggestionContextWordCount === "number" &&
+          Number.isFinite(raw.suggestionContextWordCount)
+        ) {
+          merged.suggestionContextWordCount = raw.suggestionContextWordCount;
+        }
+        if (
+          typeof raw.chatContextWordCount === "number" &&
+          Number.isFinite(raw.chatContextWordCount)
+        ) {
+          merged.chatContextWordCount = raw.chatContextWordCount;
+        }
+        if (
+          typeof raw.detailedAnswerContextWordCount === "number" &&
+          Number.isFinite(raw.detailedAnswerContextWordCount) &&
+          raw.detailedAnswerContextWordCount > 0
+        ) {
+          merged.detailedAnswerContextWordCount =
+            raw.detailedAnswerContextWordCount;
+        } else {
+          merged.detailedAnswerContextWordCount =
+            DEFAULT_DETAILED_ANSWER_CONTEXT_WORDS;
+        }
+        if (
+          typeof raw.refreshIntervalSeconds === "number" &&
+          Number.isFinite(raw.refreshIntervalSeconds)
+        ) {
+          merged.refreshIntervalSeconds = raw.refreshIntervalSeconds;
+        }
         return merged;
       },
     }

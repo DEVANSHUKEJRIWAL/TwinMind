@@ -13,10 +13,23 @@ import { useSessionStore } from "../store/sessionStore";
 import type { SuggestionItem } from "../store/sessionStore";
 import { useSettingsStore } from "../store/settingsStore";
 
+const DETAIL_STREAM_SYSTEM_PROMPT =
+  "You are a helpful assistant. The user message contains a full task with transcript and instructions. Follow it exactly and write the response the task asks for.";
+
+interface SendUserMessageOptions {
+  /** If set, sent to the model as the user turn instead of `content` (chat bubble still shows `content`). */
+  modelUserContent?: string;
+  /** If set, replaces the default chat system prompt (transcript in system). */
+  systemPromptOverride?: string;
+}
+
 interface UseChatResult {
   isStreaming: boolean;
   error: string | null;
-  sendUserMessage: (content: string) => Promise<void>;
+  sendUserMessage: (
+    content: string,
+    options?: SendUserMessageOptions
+  ) => Promise<void>;
   submitFromSuggestion: (
     item: SuggestionItem,
     batchId: string,
@@ -43,6 +56,9 @@ export function useChat(): UseChatResult {
   const chatContextWordCount = useSettingsStore(
     (s) => s.chatContextWordCount
   );
+  const detailedAnswerContextWordCount = useSettingsStore(
+    (s) => s.detailedAnswerContextWordCount
+  );
 
   const buildSystemPrompt = useCallback((): string => {
     const snippet = takeLastWords(fullTranscript, chatContextWordCount);
@@ -53,10 +69,13 @@ export function useChat(): UseChatResult {
   }, [chatContextWordCount, chatSystemPrompt, fullTranscript]);
 
   const runAssistantStream = useCallback(
-    async (historyForModel: { role: "user" | "assistant"; content: string }[]) => {
+    async (
+      historyForModel: { role: "user" | "assistant"; content: string }[],
+      systemPromptOverride?: string
+    ) => {
       setIsStreaming(true);
       setError(null);
-      const systemPrompt = buildSystemPrompt();
+      const systemPrompt = systemPromptOverride ?? buildSystemPrompt();
       const messages = [
         { role: "system" as const, content: systemPrompt },
         ...historyForModel.map((m) => ({
@@ -84,7 +103,7 @@ export function useChat(): UseChatResult {
   );
 
   const sendUserMessage = useCallback(
-    async (content: string) => {
+    async (content: string, options?: SendUserMessageOptions) => {
       const trimmed = content.trim();
       if (trimmed.length === 0 || isStreaming) {
         return;
@@ -102,22 +121,33 @@ export function useChat(): UseChatResult {
       };
       appendChatMessage(assistantPlaceholder);
       const history = useSessionStore.getState().chatHistory;
-      const nextHistory = history
-        .filter((m, idx) => {
-          if (
-            m.role === "assistant" &&
-            m.content === "" &&
-            idx === history.length - 1
-          ) {
-            return false;
-          }
-          return true;
-        })
-        .map((m) => ({
-          role: m.role,
-          content: m.content,
-        }));
-      await runAssistantStream(nextHistory);
+      const withoutTrailingEmptyAssistant = history.filter((m, idx) => {
+        if (
+          m.role === "assistant" &&
+          m.content === "" &&
+          idx === history.length - 1
+        ) {
+          return false;
+        }
+        return true;
+      });
+      const modelUserPayload =
+        options?.modelUserContent !== undefined &&
+        options.modelUserContent.trim().length > 0
+          ? options.modelUserContent.trim()
+          : trimmed;
+      const lastIdx = withoutTrailingEmptyAssistant.length - 1;
+      const nextHistory = withoutTrailingEmptyAssistant.map((m, idx) => {
+        if (
+          idx === lastIdx &&
+          m.role === "user" &&
+          options?.modelUserContent !== undefined
+        ) {
+          return { role: "user" as const, content: modelUserPayload };
+        }
+        return { role: m.role, content: m.content };
+      });
+      await runAssistantStream(nextHistory, options?.systemPromptOverride);
     },
     [appendChatMessage, isStreaming, runAssistantStream]
   );
@@ -127,23 +157,23 @@ export function useChat(): UseChatResult {
       if (isStreaming) {
         return;
       }
-      const userText = [
-        `[${item.type}]`,
-        item.headline,
-        item.subtext.length > 0 ? `— ${item.subtext}` : "",
+      const userFacing = [
+        `[Suggestion — expand] ${item.headline}`,
+        item.subtext.length > 0 ? `Preview: ${item.subtext}` : "",
       ]
         .filter(Boolean)
         .join("\n");
 
-      const transcriptSnippet = takeLastWords(
+      const transcriptForDetail = takeLastWords(
         fullTranscript,
-        chatContextWordCount
+        detailedAnswerContextWordCount
       );
       const detailPrompt = interpolateDetailedAnswerPrompt(
         detailedAnswerPrompt,
-        transcriptSnippet.length > 0 ? transcriptSnippet : "(no transcript yet)",
+        transcriptForDetail.length > 0 ? transcriptForDetail : "(no transcript yet)",
         item.type,
-        item.headline
+        item.headline,
+        item.subtext
       );
 
       void (async () => {
@@ -151,11 +181,8 @@ export function useChat(): UseChatResult {
           const detailed = await completeChatJson([
             { role: "user", content: detailPrompt },
           ]);
-          setSuggestionDetailedAnswer(
-            batchId,
-            suggestionIndex,
-            detailed.trim()
-          );
+          const text = detailed.trim();
+          setSuggestionDetailedAnswer(batchId, suggestionIndex, text);
         } catch {
           setSuggestionDetailedAnswer(
             batchId,
@@ -165,10 +192,13 @@ export function useChat(): UseChatResult {
         }
       })();
 
-      await sendUserMessage(userText);
+      await sendUserMessage(userFacing, {
+        modelUserContent: detailPrompt,
+        systemPromptOverride: DETAIL_STREAM_SYSTEM_PROMPT,
+      });
     },
     [
-      chatContextWordCount,
+      detailedAnswerContextWordCount,
       detailedAnswerPrompt,
       fullTranscript,
       isStreaming,

@@ -102,7 +102,6 @@ interface UseSuggestionsResult {
 export function useSuggestions(): UseSuggestionsResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fullTranscript = useSessionStore((s) => s.fullTranscript);
   const prependSuggestionBatch = useSessionStore(
     (s) => s.prependSuggestionBatch
   );
@@ -118,8 +117,26 @@ export function useSuggestions(): UseSuggestionsResult {
   const refresh = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    if (useSessionStore.getState().micSessionActive) {
+      const beforeSync = useSessionStore.getState().transcriptionManualSync;
+      useSessionStore.getState().requestTranscriptionManualSync();
+      const deadline = Date.now() + 8500;
+      while (Date.now() < deadline) {
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 120);
+        });
+        if (
+          useSessionStore.getState().transcriptionManualSync > beforeSync
+        ) {
+          break;
+        }
+      }
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 2500);
+      });
+    }
     const contextSnippet = takeLastWords(
-      fullTranscript,
+      useSessionStore.getState().fullTranscript,
       suggestionContextWordCount
     );
     const userContent = interpolateTranscriptContext(
@@ -148,12 +165,7 @@ export function useSuggestions(): UseSuggestionsResult {
     } finally {
       setIsLoading(false);
     }
-  }, [
-    fullTranscript,
-    prependSuggestionBatch,
-    suggestionContextWordCount,
-    suggestionPrompt,
-  ]);
+  }, [prependSuggestionBatch, suggestionContextWordCount, suggestionPrompt]);
 
   useEffect(() => {
     if (intervalRef.current !== null) {

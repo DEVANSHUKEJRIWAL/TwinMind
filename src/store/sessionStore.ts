@@ -31,8 +31,13 @@ interface SessionState {
   fullTranscript: string;
   suggestionBatches: SuggestionBatch[];
   chatHistory: ChatMessage[];
+  micSessionActive: boolean;
+  /** Incremented when the UI requests an early mic segment end (manual refresh). */
+  transcriptionManualSync: number;
   appendTranscript: (text: string) => void;
   clearTranscript: () => void;
+  requestTranscriptionManualSync: () => void;
+  setMicSessionActive: (active: boolean) => void;
   prependSuggestionBatch: (batch: SuggestionBatch) => void;
   setSuggestionDetailedAnswer: (
     batchId: string,
@@ -48,6 +53,8 @@ export const useSessionStore = create<SessionState>((set) => ({
   fullTranscript: "",
   suggestionBatches: [],
   chatHistory: [],
+  micSessionActive: false,
+  transcriptionManualSync: 0,
   appendTranscript: (text) =>
     set((state) => ({
       fullTranscript:
@@ -56,6 +63,11 @@ export const useSessionStore = create<SessionState>((set) => ({
           : `${state.fullTranscript}\n${text}`,
     })),
   clearTranscript: () => set({ fullTranscript: "" }),
+  requestTranscriptionManualSync: () =>
+    set((state) => ({
+      transcriptionManualSync: state.transcriptionManualSync + 1,
+    })),
+  setMicSessionActive: (active) => set({ micSessionActive: active }),
   prependSuggestionBatch: (batch) =>
     set((state) => ({
       suggestionBatches: [batch, ...state.suggestionBatches],
@@ -93,5 +105,7 @@ export const useSessionStore = create<SessionState>((set) => ({
       fullTranscript: "",
       suggestionBatches: [],
       chatHistory: [],
+      transcriptionManualSync: 0,
+      micSessionActive: false,
     }),
 }));

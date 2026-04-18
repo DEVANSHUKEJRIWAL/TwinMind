@@ -38,7 +38,7 @@ export function SuggestionsPanel({
           }}
           className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isLoading ? "Refreshing…" : "Refresh now"}
+          {isLoading ? "Syncing…" : "Refresh now"}
         </button>
       </header>
       {error && (
@@ -49,8 +49,9 @@ export function SuggestionsPanel({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {suggestionBatches.length === 0 && !isLoading ? (
           <p className="text-sm text-slate-500">
-            Suggestions refresh on a timer and when you click refresh. Add your
-            Groq API key in settings if you have not already.
+            Suggestions refresh on a timer. Refresh now updates the transcript
+            first (ends the current mic segment when recording), then loads three
+            new suggestions. Add your Groq API key in settings if needed.
           </p>
         ) : null}
         {isLoading && suggestionBatches.length === 0 ? (
